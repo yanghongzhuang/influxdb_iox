@@ -24,6 +24,14 @@ pub enum Packers {
     Boolean(Packer<bool>),
 }
 
+#[derive(Debug)]
+pub enum PackersIterator<'a> {
+    Float(PackerIterator<'a, f64>),
+    Integer(PackerIterator<'a, i64>),
+    String(PackerIterator<'a, ByteArray>),
+    Boolean(PackerIterator<'a, bool>),
+}
+
 macro_rules! typed_packer_accessors {
     ($(($name:ident, $name_mut:ident, $type:ty, $variant:ident),)*) => {
         $(
@@ -92,6 +100,16 @@ impl<'a> Packers {
             Self::Bytes(p) => p.swap(a, b),
             Self::String(p) => p.swap(a, b),
             Self::Boolean(p) => p.swap(a, b),
+        }
+    }
+
+    /// swap two elements within a Packers variant
+    pub fn iter(&'a mut self) -> PackersIterator<'a> {
+        match self {
+            Self::Float(p) => PackersIterator::Float(p.iter()),
+            Self::Integer(p) => PackersIterator::Integer(p.iter()),
+            Self::String(p) => PackersIterator::String(p.iter()),
+            Self::Boolean(p) => PackersIterator::Boolean(p.iter()),
         }
     }
 

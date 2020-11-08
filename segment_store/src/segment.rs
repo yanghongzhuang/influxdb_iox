@@ -1,11 +1,10 @@
-use std::collections::BTreeMap;
-
 use arrow_deps::arrow::datatypes::SchemaRef;
+use std::collections::BTreeMap;
 
 use crate::column::{cmp::Operator, Column, RowIDs, RowIDsOption, Scalar, Value, Values};
 
 /// The name used for a timestamp column.
-pub const TIME_COLUMN_NAME: &str = data_types::TIME_COLUMN_NAME;
+pub const TIME_COLUMN_NAME: &str = "time";
 
 #[derive(Debug)]
 pub struct Schema {
