@@ -544,6 +544,21 @@ mod test {
     }
 
     #[test]
+    fn size() {
+        let mut v: Fixed<i8> = Fixed::default();
+        v.values = vec![22, 33, 18];
+
+        // 24 bytes for vec and 1 byte each for values
+        assert_eq!(v.size(), 27_u64);
+
+        let mut v: Fixed<i32> = Fixed::default();
+        v.values = vec![22, 33, 18];
+
+        // 24 bytes for vec and 4 bytes each for values
+        assert_eq!(v.size(), 36_u64);
+    }
+
+    #[test]
     fn first_row_id_eq_value() {
         let mut v: Fixed<i64> = Fixed::default();
         v.values = vec![22, 33, 18];
