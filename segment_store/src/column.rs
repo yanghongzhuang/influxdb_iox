@@ -750,7 +750,7 @@ impl StringEncoding {
         }
     }
 
-    fn from_arrow_string_array(arr: arrow::array::StringArray) -> Self {
+    fn from_arrow_string_array(arr: &arrow::array::StringArray) -> Self {
         //
         // TODO(edd): potentially switch on things like cardinality in the input
         // and encode in different ways. Right now we only encode with RLE.
@@ -1542,6 +1542,13 @@ impl FloatEncoding {
 // ideally it's a "write once read many" scenario.
 impl From<arrow::array::StringArray> for Column {
     fn from(arr: arrow::array::StringArray) -> Self {
+        let data = StringEncoding::from_arrow_string_array(&arr);
+        Column::String(StringEncoding::meta(&data), data)
+    }
+}
+
+impl From<&arrow::array::StringArray> for Column {
+    fn from(arr: &arrow::array::StringArray) -> Self {
         let data = StringEncoding::from_arrow_string_array(arr);
         Column::String(StringEncoding::meta(&data), data)
     }
@@ -1997,13 +2004,27 @@ impl From<arrow::array::Int64Array> for Column {
             _ => unreachable!("min/max must both be Some or None"),
         };
 
-        let data = fixed_null::FixedNull::<arrow::datatypes::Int64Type>::from(arr);
-        let meta = MetaData {
-            size: data.size(),
-            rows: data.num_rows(),
-            range,
+        let (meta, data) = match arr.null_count() {
+            0 => {
+                let data = fixed::Fixed::from(arr);
+                let meta = MetaData {
+                    size: data.size(),
+                    rows: data.num_rows(),
+                    range,
+                };
+                (meta, IntegerEncoding::I64I64(data))
+            }
+            _ => {
+                let data = fixed_null::FixedNull::<arrow::datatypes::Int64Type>::from(arr);
+                let meta = MetaData {
+                    size: data.size(),
+                    rows: data.num_rows(),
+                    range,
+                };
+                (meta, IntegerEncoding::I64I64N(data))
+            }
         };
-        Column::Integer(meta, IntegerEncoding::I64I64N(data))
+        Column::Integer(meta, data)
     }
 }
 
