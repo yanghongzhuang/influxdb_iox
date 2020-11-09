@@ -74,7 +74,7 @@ impl<'a> Table<'a> {
 
     /// The total size of the table in bytes.
     pub fn size(&self) -> u64 {
-        todo!()
+        self.segments.iter().map(|s| s.size()).sum()
     }
 
     /// The number of rows in this table.

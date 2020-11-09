@@ -5,6 +5,7 @@ pub mod fixed_null;
 
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::mem::size_of;
 
 use croaring::Bitmap;
 
@@ -66,8 +67,16 @@ impl Column {
         }
     }
 
+    // An estimation of the size in bytes taken up by this column.
     pub fn size(&self) -> u64 {
-        0
+        match &self {
+            Column::String(meta, _) => meta.size(),
+            Column::Float(meta, _) => meta.size(),
+            Column::Integer(meta, _) => meta.size(),
+            Column::Unsigned(meta, _) => meta.size(),
+            Column::Bool => todo!(),
+            Column::ByteArray(_, _) => todo!(),
+        }
     }
 
     /// Returns the (min, max)  values stored in this column
@@ -573,6 +582,11 @@ where
 }
 
 impl<T: PartialOrd + std::fmt::Debug> MetaData<T> {
+    fn size(&self) -> u64 {
+        let containers = size_of::<u64>() + size_of::<u32>() + size_of::<Option<(T, T)>>();
+        containers as u64 + self.size // column encoding size
+    }
+
     fn might_contain_value<U>(&self, v: U) -> bool
     where
         U: Into<T>,
@@ -804,7 +818,7 @@ impl StringEncoding {
         };
 
         let meta = MetaData {
-            size: 0,
+            size: data.size(),
             rows: data.num_rows(),
             range,
         };
@@ -943,7 +957,7 @@ impl StringEncoding {
                 };
 
                 MetaData {
-                    size: 0,
+                    size: data.size(),
                     rows: data.num_rows(),
                     range,
                 }
