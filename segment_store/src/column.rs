@@ -1970,8 +1970,8 @@ impl From<&[i8]> for Column {
     }
 }
 
-impl From<arrow::array::Int64Array> for Column {
-    fn from(arr: arrow::array::Int64Array) -> Self {
+impl From<&arrow::array::Int64Array> for Column {
+    fn from(arr: &arrow::array::Int64Array) -> Self {
         // determine min and max values.
         let mut min: Option<i64> = None;
         let mut max: Option<i64> = None;
@@ -2018,13 +2018,14 @@ impl From<arrow::array::Int64Array> for Column {
                 (meta, IntegerEncoding::I64I64(data))
             }
             _ => {
-                let data = fixed_null::FixedNull::<arrow::datatypes::Int64Type>::from(arr);
-                let meta = MetaData {
-                    size: data.size(),
-                    rows: data.num_rows(),
-                    range,
-                };
-                (meta, IntegerEncoding::I64I64N(data))
+                todo!("figure out how to run off of a borrowed arrow array");
+                // let data = fixed_null::FixedNull::<arrow::datatypes::Int64Type>::from(arr);
+                // let meta = MetaData {
+                //     size: data.size(),
+                //     rows: data.num_rows(),
+                //     range,
+                // };
+                // (meta, IntegerEncoding::I64I64N(data))
             }
         };
         Column::Integer(meta, data)
