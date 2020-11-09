@@ -50,7 +50,8 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[Plain<T>] rows: {:?}, size: {}",
+            "[Fixed<{}>] rows: {:?}, size: {}",
+            std::any::type_name::<T>(),
             self.num_rows(),
             self.size()
         )

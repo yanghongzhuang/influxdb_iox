@@ -47,7 +47,6 @@ impl Table {
     pub fn with_record_batch(name: String, col_types: Vec<ColumnType>, rb: RecordBatch) -> Self {
         let rows = rb.num_rows();
         let mut columns = BTreeMap::new();
-        println!("{:?}", &col_types);
         for (i, ct) in col_types.into_iter().enumerate() {
             match ct {
                 ColumnType::Tag(name) => {
@@ -90,6 +89,7 @@ impl Table {
         }
 
         let segment = Segment::new(rows as u32, columns);
+        println!("{}", &segment);
 
         Self::new(name, segment)
     }

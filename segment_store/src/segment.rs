@@ -296,6 +296,17 @@ impl Segment {
     }
 }
 
+impl std::fmt::Display for Segment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.meta)?;
+        for (name, column) in &self.all_columns {
+            writeln!(f, "Column {}", name)?;
+            writeln!(f, "{}\n", column)?;
+        }
+        Ok(())
+    }
+}
+
 pub type Predicate<'a> = (ColumnName<'a>, (Operator, Value<'a>));
 
 // A GroupKey is an ordered collection of row values. The order determines which
@@ -402,6 +413,16 @@ impl MetaData {
             // could contain the value.
             Operator::LTE => column_min <= value,
         }
+    }
+}
+
+impl std::fmt::Display for MetaData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Segment MetaData: size: {:?} rows: {:?} time range {:?}, ranges: {:?}",
+            self.size, self.rows, self.time_range, self.column_ranges,
+        )
     }
 }
 

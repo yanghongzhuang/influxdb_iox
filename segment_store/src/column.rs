@@ -654,6 +654,20 @@ impl<T: PartialOrd + std::fmt::Debug> MetaData<T> {
         }
     }
 }
+
+impl<T: std::fmt::Debug + PartialOrd> std::fmt::Display for MetaData<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MetaData<{}> size: {:?} rows: {:?} range: {:?}",
+            std::any::type_name::<T>(),
+            self.size,
+            self.rows,
+            self.range
+        )
+    }
+}
+
 pub enum StringEncoding {
     RLEDictionary(dictionary::RLE),
     Dictionary(dictionary::Plain),
@@ -1440,6 +1454,40 @@ impl IntegerEncoding {
     }
 }
 
+impl std::fmt::Display for IntegerEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IntegerEncoding::I64I64(data) => write!(f, "{}", data),
+            IntegerEncoding::I64I32(data) => write!(f, "{}", data),
+            IntegerEncoding::I64U32(data) => write!(f, "{}", data),
+            IntegerEncoding::I64I16(data) => write!(f, "{}", data),
+            IntegerEncoding::I64U16(data) => write!(f, "{}", data),
+            IntegerEncoding::I64I8(data) => write!(f, "{}", data),
+            IntegerEncoding::I64U8(data) => write!(f, "{}", data),
+            IntegerEncoding::I32I32(data) => write!(f, "{}", data),
+            IntegerEncoding::I32I16(data) => write!(f, "{}", data),
+            IntegerEncoding::I32U16(data) => write!(f, "{}", data),
+            IntegerEncoding::I32I8(data) => write!(f, "{}", data),
+            IntegerEncoding::I32U8(data) => write!(f, "{}", data),
+            IntegerEncoding::I16I16(data) => write!(f, "{}", data),
+            IntegerEncoding::I16I8(data) => write!(f, "{}", data),
+            IntegerEncoding::I16U8(data) => write!(f, "{}", data),
+            IntegerEncoding::I8I8(data) => write!(f, "{}", data),
+            IntegerEncoding::U64U64(data) => write!(f, "{}", data),
+            IntegerEncoding::U64U32(data) => write!(f, "{}", data),
+            IntegerEncoding::U64U16(data) => write!(f, "{}", data),
+            IntegerEncoding::U64U8(data) => write!(f, "{}", data),
+            IntegerEncoding::U32U32(data) => write!(f, "{}", data),
+            IntegerEncoding::U32U16(data) => write!(f, "{}", data),
+            IntegerEncoding::U32U8(data) => write!(f, "{}", data),
+            IntegerEncoding::U16U16(data) => write!(f, "{}", data),
+            IntegerEncoding::U16U8(data) => write!(f, "{}", data),
+            IntegerEncoding::U8U8(data) => write!(f, "{}", data),
+            IntegerEncoding::I64I64N(data) => write!(f, "{}", data),
+        }
+    }
+}
+
 pub enum FloatEncoding {
     Fixed64(fixed::Fixed<f64>),
     Fixed32(fixed::Fixed<f32>),
@@ -1532,6 +1580,32 @@ impl FloatEncoding {
         match &self {
             FloatEncoding::Fixed64(c) => c.count(row_ids),
             FloatEncoding::Fixed32(c) => c.count(row_ids),
+        }
+    }
+}
+
+impl std::fmt::Display for FloatEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FloatEncoding::Fixed64(data) => write!(f, "{}", data),
+            FloatEncoding::Fixed32(data) => write!(f, "{}", data),
+        }
+    }
+}
+
+impl std::fmt::Display for Column {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Column::String(meta, data) => write!(f, "String Column. Meta: {}, Data {}", meta, data),
+            Column::Float(meta, data) => write!(f, "Float Column. Meta: {}, Data {}", meta, data),
+            Column::Integer(meta, data) => {
+                write!(f, "Integer Column. Meta: {}, Data {}", meta, data)
+            }
+            Column::Unsigned(meta, data) => {
+                write!(f, "Unsigned Column. Meta: {}, Data {}", meta, data)
+            }
+            Column::Bool => todo!(),
+            Column::ByteArray(_, _) => todo!(),
         }
     }
 }
