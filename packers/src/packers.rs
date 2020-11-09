@@ -305,6 +305,11 @@ where
         &self.values
     }
 
+    // move values out of Packer
+    pub fn owned(self) -> Vec<Option<T>> {
+        self.values
+    }
+
     /// Returns an iterator that emits `chunk_size` values from the Packer until
     /// all values are returned.
     pub fn chunk_values(&self, chunk_size: usize) -> std::slice::Chunks<'_, Option<T>> {
