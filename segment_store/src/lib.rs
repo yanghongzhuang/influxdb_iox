@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 pub mod column;
 pub(crate) mod partition;
-pub(crate) mod segment;
+pub mod segment;
 pub mod table;
 
 use std::collections::BTreeMap;

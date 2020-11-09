@@ -47,7 +47,7 @@ impl Table {
     pub fn with_record_batch(name: String, col_types: Vec<ColumnType>, rb: RecordBatch) -> Self {
         let rows = rb.num_rows();
         let mut columns = BTreeMap::new();
-
+        println!("{:?}", &col_types);
         for (i, ct) in col_types.into_iter().enumerate() {
             match ct {
                 ColumnType::Tag(name) => {
@@ -60,27 +60,36 @@ impl Table {
 
                     let column_data = Column::from(arr);
 
-                    let my_ct = segment::ColumnType::Tag(column_data);
-                    columns.insert(name, my_ct);
+                    columns.insert(name, segment::ColumnType::Tag(column_data));
                 }
-                ColumnType::Field(name) => {}
-                ColumnType::Time(name) => {}
+                ColumnType::Field(name) => {
+                    let arrow_column = rb.column(i);
+                    let column_data = Column::from(match arrow_column.data_type() {
+                        arrow::datatypes::DataType::Int64 => arrow_column
+                            .as_any()
+                            .downcast_ref::<arrow::array::Int64Array>()
+                            .unwrap(),
+                        _ => unimplemented!("TODO: currently unsupported data type for field"),
+                    });
+
+                    columns.insert(name, segment::ColumnType::Field(column_data));
+                }
+                ColumnType::Time(name) => {
+                    let arrow_column = rb.column(i);
+                    let column_data = Column::from(match arrow_column.data_type() {
+                        arrow::datatypes::DataType::Int64 => arrow_column
+                            .as_any()
+                            .downcast_ref::<arrow::array::Int64Array>()
+                            .unwrap(),
+                        _ => unimplemented!("TODO: currently unsupported data type for field"),
+                    });
+
+                    columns.insert(name, segment::ColumnType::Time(column_data));
+                }
             }
         }
 
-        for (i, column) in rb.columns().iter().enumerate() {
-            match column.data_type() {
-                arrow::datatypes::DataType::Utf8 => {}
-                arrow::datatypes::DataType::Boolean => {}
-                arrow::datatypes::DataType::Int64 => {}
-                arrow::datatypes::DataType::UInt64 => {}
-                arrow::datatypes::DataType::Float64 => {}
-                arrow::datatypes::DataType::Binary => {}
-                _ => unreachable!("unsupported arrow types"),
-            }
-        }
-
-        let mut segment = Segment::new(rows as u32, columns);
+        let segment = Segment::new(rows as u32, columns);
 
         Self::new(name, segment)
     }
@@ -131,8 +140,8 @@ impl Table {
     }
 
     /// The ranges on each column in the table (across all segments).
-    pub fn column_ranges(&self) -> BTreeMap<String, (OwnedValue, OwnedValue)> {
-        todo!()
+    pub fn column_ranges(&self) -> &BTreeMap<String, (OwnedValue, OwnedValue)> {
+        &self.meta.column_ranges
     }
 
     // Identify set of segments that may satisfy the predicates.
@@ -143,6 +152,10 @@ impl Table {
             // check all provided predicates
             for (col_name, pred) in predicates {
                 if !segment.column_could_satisfy_predicate(col_name, pred) {
+                    println!(
+                        "segment {:?} could not contain predicate {:?}",
+                        col_name, pred
+                    );
                     continue 'seg;
                 }
             }
@@ -501,6 +514,7 @@ impl MetaData {
     }
 }
 
+#[derive(Debug)]
 pub enum ColumnType {
     Tag(String),
     Field(String),

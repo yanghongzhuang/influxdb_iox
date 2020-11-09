@@ -11,7 +11,9 @@ use arrow_deps::{
 };
 use packers::{sorter, Packer, Packers};
 
-use delorean_segment_store::{table, table::ColumnType};
+use delorean_segment_store::column::cmp::Operator;
+use delorean_segment_store::column::{OwnedValue, Scalar, Value};
+use delorean_segment_store::{segment::Predicate, table, table::ColumnType};
 
 const ONE_MS: i64 = 1_000_000;
 const ONE_HOUR: i64 = ONE_MS * 3_600_000;
@@ -23,7 +25,7 @@ const ROWS_PER_HOUR: usize = 1_000_000;
 
 // minimum and maximum number of spans in a trace
 const SPANS_MIN: usize = 2;
-const SPANS_MAX: usize = 30;
+const SPANS_MAX: usize = 31;
 
 const HOURS: usize = 1;
 
@@ -85,6 +87,65 @@ fn main() {
     let table = table::Table::with_record_batch("tracing".to_string(), column_names, rb);
     println!("to segment in {:?}", now.elapsed());
     println!("segment size is {:?} bytes", table.size());
+
+    let ranges = table.column_ranges();
+    let range = ranges.get("trace_id").unwrap();
+    println!("trace {:?} {:?}", range.0, range.1);
+
+    // loop {
+    if let OwnedValue::String(max) = &range.0 {
+        let now = Instant::now();
+        let results = table.select(
+            &[
+                "env",
+                "data_centre",
+                "cluster",
+                "user_id",
+                "request_id",
+                "trace_id",
+                "node_id",
+                "pod_id",
+                "span_id",
+                "duration",
+                "time",
+            ],
+            &[
+                ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
+                ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
+                ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
+            ],
+        );
+        println!("executed select in {:?}", now.elapsed());
+        println!("{:?}", results);
+    }
+
+    // if let OwnedValue::String(max) = &range.1 {
+    //     let now = Instant::now();
+    //     let results = table.select(
+    //         &[
+    //             "env",
+    //             "data_centre",
+    //             "cluster",
+    //             "user_id",
+    //             "request_id",
+    //             "trace_id",
+    //             "node_id",
+    //             "pod_id",
+    //             "span_id",
+    //             "duration",
+    //             "time",
+    //         ],
+    //         &[
+    //             ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
+    //             ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
+    //             ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
+    //         ],
+    //     );
+    //     println!("executed select in {:?}", now.elapsed());
+    //     println!("{:?}", results);
+    // }
+
+    // }
 }
 
 fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) -> Vec<Packers> {

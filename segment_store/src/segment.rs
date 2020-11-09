@@ -55,7 +55,6 @@ impl Segment {
         let mut all_columns = BTreeMap::new();
 
         for (name, ct) in columns {
-            println!("Column {:?} size is {:?}", &name, ct.size());
             meta.size += ct.size();
 
             match ct {
