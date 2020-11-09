@@ -1,7 +1,9 @@
 use arrow_deps::arrow::datatypes::SchemaRef;
 use std::collections::BTreeMap;
 
-use crate::column::{cmp::Operator, Column, RowIDs, RowIDsOption, Scalar, Value, Values};
+use crate::column::{
+    cmp::Operator, Column, OwnedValue, RowIDs, RowIDsOption, Scalar, Value, Values,
+};
 
 /// The name used for a timestamp column.
 pub const TIME_COLUMN_NAME: &str = "time";
@@ -33,72 +35,77 @@ impl Schema {
 ///
 /// This implementation will pull over the bulk of the prototype segment store
 /// crate.
-pub struct Segment<'a> {
-    meta: MetaData<'a>,
+pub struct Segment {
+    meta: MetaData,
 
-    all_columns: BTreeMap<ColumnName<'a>, &'a Column>,
-
-    tag_columns: Vec<&'a Column>,
-    field_columns: Vec<&'a Column>,
-    time_column: &'a Column,
+    all_columns: BTreeMap<String, Column>,
+    // tag_columns: Vec<&'a Column>,
+    // field_columns: Vec<&'a Column>,
+    // time_column: &'a Column,
 }
 
-impl<'a> Segment<'a> {
-    pub fn new(rows: u32, columns: BTreeMap<ColumnName<'a>, &'a ColumnType>) -> Self {
+impl Segment {
+    pub fn new(rows: u32, columns: BTreeMap<String, ColumnType>) -> Self {
         let mut meta = MetaData::default();
         meta.rows = rows;
 
-        let mut tag_columns: Vec<&'a Column> = vec![];
-        let mut field_columns: Vec<&'a Column> = vec![];
-        let mut time_column: Option<&'a Column> = None;
+        // let mut tag_columns: Vec<&'a Column> = vec![];
+        // let mut field_columns: Vec<&'a Column> = vec![];
+        // let mut time_column: Option<&'a Column> = None;
         let mut all_columns = BTreeMap::new();
 
         for (name, ct) in columns {
+            println!("Column {:?} size is {:?}", &name, ct.size());
             meta.size += ct.size();
 
             match ct {
                 ColumnType::Tag(c) => {
                     assert_eq!(c.num_rows(), rows);
 
-                    tag_columns.push(&c);
+                    // tag_columns.push(&c);
 
-                    if let Some(range) = tag_columns.last().unwrap().column_range() {
-                        meta.column_ranges.insert(name, range);
-                    }
+                    // if let Some(range) = tag_columns.last().unwrap().column_range() {
+                    //     meta.column_ranges.insert(name, range);
+                    // }
+                    meta.column_ranges
+                        .insert(name.clone(), c.column_range().unwrap());
                     all_columns.insert(name, c);
                 }
                 ColumnType::Field(c) => {
                     assert_eq!(c.num_rows(), rows);
 
-                    field_columns.push(&c);
+                    // field_columns.push(&c);
 
-                    if let Some(range) = c.column_range() {
-                        meta.column_ranges.insert(name, range);
-                    }
+                    // if let Some(range) = c.column_range() {
+                    //     meta.column_ranges.insert(name, range);
+                    // }
+                    meta.column_ranges
+                        .insert(name.clone(), c.column_range().unwrap());
                     all_columns.insert(name, c);
                 }
                 ColumnType::Time(c) => {
                     assert_eq!(c.num_rows(), rows);
 
-                    let range = c.column_range();
-                    meta.time_range = match range {
+                    meta.time_range = match c.column_range() {
                         None => panic!("time column must have non-null value"),
                         Some((
-                            Value::Scalar(Scalar::I64(min)),
-                            Value::Scalar(Scalar::I64(max)),
+                            OwnedValue::Scalar(Scalar::I64(min)),
+                            OwnedValue::Scalar(Scalar::I64(max)),
                         )) => (min, max),
                         Some((_, _)) => unreachable!("unexpected types for time range"),
                     };
 
-                    meta.column_ranges.insert(name, range.unwrap());
-                    match time_column {
-                        Some(_) => panic!("multiple time columns unsupported"),
-                        None => {
-                            // probably not a firm requirement....
-                            assert_eq!(name, TIME_COLUMN_NAME);
-                            time_column = Some(&c);
-                        }
-                    }
+                    // meta.column_ranges.insert(name, range.unwrap());
+                    meta.column_ranges
+                        .insert(name.clone(), c.column_range().unwrap());
+                    // match time_column {
+                    //     Some(_) => panic!("multiple time columns unsupported"),
+                    //     None => {
+                    //         // probably not a firm requirement....
+                    //         assert_eq!(name, TIME_COLUMN_NAME);
+                    //         time_column = Some(&c);
+                    //     }
+                    // }
                     all_columns.insert(name, c);
                 }
             }
@@ -107,9 +114,9 @@ impl<'a> Segment<'a> {
         Self {
             meta,
             all_columns,
-            tag_columns,
-            field_columns,
-            time_column: time_column.unwrap(),
+            // tag_columns,
+            // field_columns,
+            // time_column: time_column.unwrap(),
         }
     }
 
@@ -125,7 +132,7 @@ impl<'a> Segment<'a> {
     }
 
     /// The ranges on each column in the segment
-    pub fn column_ranges(&self) -> &BTreeMap<ColumnName<'a>, (Value<'a>, Value<'a>)> {
+    pub fn column_ranges(&self) -> &BTreeMap<String, (OwnedValue, OwnedValue)> {
         &self.meta.column_ranges
     }
 
@@ -153,7 +160,7 @@ impl<'a> Segment<'a> {
     /// predicates.
     ///
     /// Right now, predicates are conjunctive (AND).
-    pub fn read_filter(
+    pub fn read_filter<'a>(
         &self,
         columns: &[ColumnName<'a>],
         predicates: &[Predicate<'_>],
@@ -162,7 +169,7 @@ impl<'a> Segment<'a> {
         self.materialise_rows(columns, row_ids)
     }
 
-    fn materialise_rows(
+    fn materialise_rows<'a>(
         &self,
         columns: &[ColumnName<'a>],
         row_ids: RowIDsOption,
@@ -219,7 +226,8 @@ impl<'a> Segment<'a> {
             .collect::<Vec<_>>();
         assert!(time_predicates.len() == 2);
 
-        let time_row_ids = self.time_column.row_ids_filter_range(
+        let time_column = self.all_columns.get(TIME_COLUMN_NAME).unwrap();
+        let time_row_ids = time_column.row_ids_filter_range(
             &time_predicates[0].1, // min time
             &time_predicates[1].1, // max time
             dst,
@@ -332,7 +340,7 @@ impl ColumnType {
 // }
 
 #[derive(Default, Debug)]
-struct MetaData<'a> {
+struct MetaData {
     // The total size of the table in bytes.
     size: u64,
 
@@ -345,7 +353,7 @@ struct MetaData<'a> {
     //
     // This can be used to skip the table entirely if a logical predicate can't
     // possibly match based on the range of values a column has.
-    column_ranges: BTreeMap<ColumnName<'a>, (Value<'a>, Value<'a>)>,
+    column_ranges: BTreeMap<String, (OwnedValue, OwnedValue)>,
 
     // The total time range of this table spanning all of the segments within
     // the table.
@@ -355,7 +363,7 @@ struct MetaData<'a> {
     time_range: (i64, i64),
 }
 
-impl MetaData<'_> {
+impl MetaData {
     // helper function to determine if the provided predicate could be satisfied by
     // the segment. If this function returns `false` then there is no point
     // attempting to read data from the segment.
@@ -373,7 +381,7 @@ impl MetaData<'_> {
         let (op, value) = predicate;
         match op {
             // If the column range covers the value then it could contain that value.
-            Operator::Equal => column_min <= value && value <= column_max,
+            Operator::Equal => column_min <= value && column_max >= value,
 
             // If every value in the column is equal to "value" then this will
             // be false, otherwise it must be satisfied
@@ -467,20 +475,20 @@ mod test {
     fn read_filter() {
         let mut columns = BTreeMap::new();
         let tc = ColumnType::Time(Column::from(&[1_i64, 2, 3, 4, 5, 6][..]));
-        columns.insert("time", &tc);
+        columns.insert("time".to_string(), tc);
 
         let rc = ColumnType::Tag(Column::from(
             &["west", "west", "east", "west", "south", "north"][..],
         ));
-        columns.insert("region", &rc);
+        columns.insert("region".to_string(), rc);
 
         let mc = ColumnType::Tag(Column::from(
             &["GET", "POST", "POST", "POST", "PUT", "GET"][..],
         ));
-        columns.insert("method", &mc);
+        columns.insert("method".to_string(), mc);
 
         let fc = ColumnType::Field(Column::from(&[100_u64, 101, 200, 203, 203, 10][..]));
-        columns.insert("count", &fc);
+        columns.insert("count".to_string(), fc);
 
         let segment = Segment::new(6, columns);
 
@@ -556,17 +564,17 @@ west,4";
     fn segment_could_satisfy_predicate() {
         let mut columns = BTreeMap::new();
         let tc = ColumnType::Time(Column::from(&[1_i64, 2, 3, 4, 5, 6][..]));
-        columns.insert("time", &tc);
+        columns.insert("time".to_string(), tc);
 
         let rc = ColumnType::Tag(Column::from(
             &["west", "west", "east", "west", "south", "north"][..],
         ));
-        columns.insert("region", &rc);
+        columns.insert("region".to_string(), rc);
 
         let mc = ColumnType::Tag(Column::from(
             &["GET", "GET", "GET", "GET", "GET", "GET"][..],
         ));
-        columns.insert("method", &mc);
+        columns.insert("method".to_string(), mc);
 
         let segment = Segment::new(6, columns);
 

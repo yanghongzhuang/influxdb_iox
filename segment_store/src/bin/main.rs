@@ -3,9 +3,15 @@ use rand::distributions::Alphanumeric;
 use rand::prelude::*;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
+use std::sync::Arc;
+use std::time::Instant;
 
-use arrow_deps::parquet::data_type::ByteArray;
+use arrow_deps::{
+    arrow, arrow::array, arrow::record_batch::RecordBatch, parquet::data_type::ByteArray,
+};
 use packers::{sorter, Packer, Packers};
+
+use delorean_segment_store::{table, table::ColumnType};
 
 const ONE_MS: i64 = 1_000_000;
 const ONE_HOUR: i64 = ONE_MS * 3_600_000;
@@ -26,11 +32,59 @@ fn main() {
 
     let mut segment = generate_segment(START_TIME, ROWS_PER_HOUR, &mut rng);
 
-    // env, data_centre, cluster, node_id, pod_id, user_id, request_id, time
+    let column_names = vec![
+        ColumnType::Tag("env".to_string()),
+        ColumnType::Tag("data_centre".to_string()),
+        ColumnType::Tag("cluster".to_string()),
+        ColumnType::Tag("user_id".to_string()),
+        ColumnType::Tag("request_id".to_string()),
+        ColumnType::Tag("trace_id".to_string()),
+        ColumnType::Tag("node_id".to_string()),
+        ColumnType::Tag("pod_id".to_string()),
+        ColumnType::Tag("span_id".to_string()),
+        ColumnType::Field("duration".to_string()),
+        ColumnType::Time("time".to_string()),
+    ];
+
+    // COLUMN ORDERS:
+    // env            - 0
+    // data_centre,   - 1
+    // cluster,       - 2
+    // user_id,       - 3
+    // request_id,    - 4
+    // trace_id,      - 5
+    // node_id,       - 6
+    // pod_id,        - 7
+    // span_id        - 8
+    // duration,      - 9
+    // time,          - 10
     //
     // No point ordering on trace_id or span_id
-    sorter::sort(&mut segment, &[0, 1, 2, 6, 7, 3, 4, 5, 10]).unwrap();
-    print_segment(&mut segment);
+    sorter::sort(&mut segment, &[0, 1, 2, 6, 7, 3, 4, 10]).unwrap();
+
+    let now = Instant::now();
+    let rb = packers_to_record_batch(
+        vec![
+            "env",
+            "data_centre",
+            "cluster",
+            "user_id",
+            "request_id",
+            "trace_id",
+            "node_id",
+            "pod_id",
+            "span_id",
+            "duration",
+            "time",
+        ],
+        segment,
+    );
+    println!("to arrow rb in {:?}", now.elapsed());
+
+    let now = Instant::now();
+    let table = table::Table::with_record_batch("tracing".to_string(), column_names, rb);
+    println!("to segment in {:?}", now.elapsed());
+    println!("segment size is {:?} bytes", table.size());
 }
 
 fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) -> Vec<Packers> {
@@ -76,7 +130,6 @@ fn generate_trace(
     rng: &mut ThreadRng,
     mut table: Vec<Packers>,
 ) -> Vec<Packers> {
-    println!("START: {:?}", timestamp);
     let env_value = rng.gen_range(0_u8, 2);
     let env = format!("env-{:?}", env_value); // cardinality of 2.
 
@@ -204,6 +257,86 @@ fn generate_trace(
 
     // Return the updated table back
     table
+}
+
+// // determine the arrow schema type from a segment store column
+// fn arrow_datatype(col: &segment::ColumnType) -> datatypes::DataType {
+//         match col {
+//             segment::ColumnType::Tag(c) => {
+//                 datatypes::DataType::Utf8
+//             },
+//             segment::ColumnType::Field(c) => {
+//                 match c{
+//                     Column::String(_, _) => datatypes::DataType::Utf8,
+//                     Column::Float(_, _) => datatypes::DataType::Float64,
+//                     Column::Integer(_, _) => datatypes::DataType::Int64,
+//                     Column::Unsigned(_, _) => datatypes::DataType::UInt64,
+//                     Column::Bool => datatypes::DataType::Boolean,
+//                     Column::ByteArray(_, _) => datatypes::DataType::Binary,
+//                 }
+//             },
+
+//             segment::ColumnType::Time(c) => datatypes::DataType::Int64,
+//         }
+//     }
+
+// determine the arrow schema type from a packer column
+fn arrow_datatype(col: &Packers) -> arrow::datatypes::DataType {
+    match col {
+        Packers::Float(_) => arrow::datatypes::DataType::Float64,
+        Packers::Integer(_) => arrow::datatypes::DataType::Int64,
+        Packers::String(_) => arrow::datatypes::DataType::Utf8,
+        Packers::Boolean(_) => arrow::datatypes::DataType::Boolean,
+    }
+}
+
+fn packers_to_record_batch(col_names: Vec<&str>, columns: Vec<Packers>) -> RecordBatch {
+    let mut record_batch_fields: Vec<arrow::datatypes::Field> = vec![];
+
+    for (i, column) in columns.iter().enumerate() {
+        let nullable = false; // columns not nullable in test
+
+        let field = arrow::datatypes::Field::new(col_names[i], arrow_datatype(column), nullable);
+
+        record_batch_fields.push(field);
+    }
+    println!("{:?}", record_batch_fields);
+
+    let schema = arrow::datatypes::Schema::new(record_batch_fields);
+
+    let mut record_batch_arrays: Vec<arrow::array::ArrayRef> = vec![];
+
+    for column in columns {
+        match column {
+            Packers::Float(p) => {
+                record_batch_arrays.push(Arc::new(array::Float64Array::from(p.owned())));
+            }
+            Packers::Integer(p) => {
+                record_batch_arrays.push(Arc::new(array::Int64Array::from(p.owned())));
+            }
+            Packers::String(p) => {
+                let mut builder = array::StringBuilder::new(p.num_rows());
+                for v in p.values() {
+                    match v {
+                        Some(v) => {
+                            builder.append_value(v.as_utf8().unwrap()).unwrap();
+                        }
+                        None => {
+                            builder.append_null().unwrap();
+                        }
+                    }
+                }
+                let array = builder.finish();
+                record_batch_arrays.push(Arc::new(array));
+            }
+            Packers::Boolean(p) => {
+                let array = array::BooleanArray::from(p.owned());
+                record_batch_arrays.push(Arc::new(array));
+            }
+        }
+    }
+
+    RecordBatch::try_new(Arc::new(schema), record_batch_arrays).unwrap()
 }
 
 fn print_segment(segment: &mut Vec<Packers>) {
