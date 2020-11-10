@@ -21,11 +21,11 @@ const START_TIME: i64 = 1604188800000000000_i64;
 
 // determines how many rows will be in a single segment, which is set to one
 // hour.
-const ROWS_PER_HOUR: usize = 1_000_000;
+const ROWS_PER_HOUR: usize = 2_000_000;
 
 // minimum and maximum number of spans in a trace
-const SPANS_MIN: usize = 2;
-const SPANS_MAX: usize = 31;
+const SPANS_MIN: usize = 10;
+const SPANS_MAX: usize = 11;
 
 const HOURS: usize = 1;
 
@@ -93,59 +93,66 @@ fn main() {
     println!("trace {:?} {:?}", range.0, range.1);
 
     // loop {
-    if let OwnedValue::String(max) = &range.0 {
-        let now = Instant::now();
-        let results = table.select(
-            &[
-                "env",
-                "data_centre",
-                "cluster",
-                "user_id",
-                "request_id",
-                "trace_id",
-                "node_id",
-                "pod_id",
-                "span_id",
-                "duration",
-                "time",
-            ],
-            &[
-                ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
-                ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
-                ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
-            ],
-        );
-        println!("executed select in {:?}", now.elapsed());
-        println!("{:?}", results);
+    for _ in 0..20 {
+        if let OwnedValue::String(max) = &range.0 {
+            let now = Instant::now();
+            let results = table.select(
+                &[
+                    "env",
+                    "data_centre",
+                    "cluster",
+                    "user_id",
+                    "request_id",
+                    "trace_id",
+                    "node_id",
+                    "pod_id",
+                    "span_id",
+                    "duration",
+                    "time",
+                ],
+                &[
+                    ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
+                    ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
+                    ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
+                ],
+            );
+            println!("executed select in {:?}", now.elapsed());
+            // println!("{:?}", results);
+        }
     }
 
-    // if let OwnedValue::String(max) = &range.1 {
-    //     let now = Instant::now();
-    //     let results = table.select(
-    //         &[
-    //             "env",
-    //             "data_centre",
-    //             "cluster",
-    //             "user_id",
-    //             "request_id",
-    //             "trace_id",
-    //             "node_id",
-    //             "pod_id",
-    //             "span_id",
-    //             "duration",
-    //             "time",
-    //         ],
-    //         &[
-    //             ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
-    //             ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
-    //             ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
-    //         ],
-    //     );
-    //     println!("executed select in {:?}", now.elapsed());
-    //     println!("{:?}", results);
-    // }
+    for _ in 0..20 {
+        if let OwnedValue::String(max) = &range.1 {
+            let now = Instant::now();
+            let results = table.select(
+                &[
+                    "env",
+                    "data_centre",
+                    "cluster",
+                    "user_id",
+                    "request_id",
+                    "trace_id",
+                    "node_id",
+                    "pod_id",
+                    "span_id",
+                    "duration",
+                    "time",
+                ],
+                &[
+                    ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
+                    ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
+                    ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
+                ],
+            );
+            println!("executed select in {:?}", now.elapsed());
+            // println!("{:?}", results);
+        }
+    }
 
     // }
+
+    test_simple_mat(&mut rng);
+    // test_encoded_mat(&mut rng);
 }
 
 fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) -> Vec<Packers> {
@@ -449,4 +456,82 @@ fn print_segment(segment: &mut Vec<Packers>) {
         }
         rows += 1;
     }
+}
+
+fn test_simple_mat(rng: &mut ThreadRng) {
+    let mut data = Vec::with_capacity(2_000_000);
+    for _ in 0..data.capacity() {
+        data.push(rng.sample_iter(&Alphanumeric).take(8).collect::<String>());
+    }
+
+    let row_ids = &[
+        934060_usize,
+        934357,
+        934791,
+        935216,
+        936017,
+        939675,
+        940112,
+        941812,
+        942309,
+        942709,
+    ];
+
+    let now = std::time::Instant::now();
+    let mut results = Vec::with_capacity(row_ids.len());
+    for row_id in row_ids {
+        results.push(Value::String(data[*row_id].as_str()));
+    }
+    println!("simple strings took {:?}", now.elapsed());
+}
+
+fn test_encoded_mat(rng: &mut ThreadRng) {
+    // let mut dict = std::collections::BTreeMap::new();
+    let mut data = Vec::with_capacity(2_000_000);
+
+    let mut raw = Vec::with_capacity(data.capacity());
+    for _ in 0..raw.capacity() {
+        raw.push(rng.sample_iter(&Alphanumeric).take(8).collect::<String>());
+    }
+
+    let mut dict = raw.clone();
+    dict.sort();
+
+    // let i = 0;
+    // for v in sorted {
+    // dict.insert(v, i as u32);
+    // i += 1;
+    // dict.
+    // }
+
+    for raw_v in raw {
+        for i in 0..dict.len() {
+            if dict[i] == raw_v {
+                data.push(i as u32);
+                break;
+            }
+        }
+    }
+
+    let row_ids = &[
+        934060_usize,
+        934357,
+        934791,
+        935216,
+        936017,
+        939675,
+        940112,
+        941812,
+        942309,
+        942709,
+    ];
+
+    let now = std::time::Instant::now();
+    let mut results = Vec::with_capacity(row_ids.len());
+    for row_id in row_ids {
+        let encoded_id = data[*row_id];
+        let decoded_value = &dict[encoded_id as usize];
+        results.push(Value::String(decoded_value));
+    }
+    println!("encoded strings took {:?}", now.elapsed());
 }
