@@ -3465,7 +3465,7 @@ mod test {
             Some(30),
         ];
         let arr = Int64Array::from(input);
-        let col = Column::from(arr);
+        let col = Column::from(&arr);
         row_ids = col.row_ids_filter(
             &cmp::Operator::GT,
             &Value::Scalar(Scalar::I64(10)),
@@ -3820,7 +3820,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(arr);
+        let col = Column::from(&arr);
         assert_eq!(col.max(&[0, 1, 2][..]), Value::Scalar(Scalar::I64(200)));
 
         let input = &[Some("hello"), None, Some("world")];
@@ -3842,7 +3842,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(arr);
+        let col = Column::from(&arr);
         assert_eq!(col.sum(&[0, 1, 2][..]), Value::Scalar(Scalar::I64(200)));
     }
 
@@ -3858,7 +3858,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(arr);
+        let col = Column::from(&arr);
         assert_eq!(col.count(&[0, 1, 2][..]), 1);
         assert_eq!(col.count(&[0, 2][..]), 0);
     }
