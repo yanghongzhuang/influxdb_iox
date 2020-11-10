@@ -13,7 +13,7 @@ use packers::{sorter, Packer, Packers};
 
 use delorean_segment_store::column::cmp::Operator;
 use delorean_segment_store::column::{OwnedValue, Scalar, Value};
-use delorean_segment_store::{segment::Predicate, table, table::ColumnType};
+use delorean_segment_store::{table, table::ColumnType};
 
 const ONE_MS: i64 = 1_000_000;
 const ONE_HOUR: i64 = ONE_MS * 3_600_000;
@@ -21,7 +21,7 @@ const START_TIME: i64 = 1604188800000000000_i64;
 
 // determines how many rows will be in a single segment, which is set to one
 // hour.
-const ROWS_PER_HOUR: usize = 2_000_000;
+const ROWS_PER_HOUR: usize = 100_000_000;
 
 // minimum and maximum number of spans in a trace
 const SPANS_MIN: usize = 10;
@@ -151,7 +151,7 @@ fn main() {
 
     // }
 
-    test_simple_mat(&mut rng);
+    // test_simple_mat(&mut rng);
     // test_encoded_mat(&mut rng);
 }
 
