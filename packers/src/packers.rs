@@ -29,6 +29,7 @@ pub enum PackersIterator<'a> {
     Float(PackerIterator<'a, f64>),
     Integer(PackerIterator<'a, i64>),
     String(PackerIterator<'a, ByteArray>),
+    UtfString(PackerIterator<'a, String>),
     Boolean(PackerIterator<'a, bool>),
 }
 
@@ -110,6 +111,7 @@ impl<'a> Packers {
             Self::Integer(p) => PackersIterator::Integer(p.iter()),
             Self::String(p) => PackersIterator::String(p.iter()),
             Self::Boolean(p) => PackersIterator::Boolean(p.iter()),
+            Self::UtfString(p) => PackersIterator::UtfString(p.iter()),
         }
     }
 

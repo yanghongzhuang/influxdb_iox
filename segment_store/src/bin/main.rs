@@ -11,9 +11,9 @@ use arrow_deps::{
 };
 use packers::{sorter, Packer, Packers};
 
-use delorean_segment_store::column::cmp::Operator;
-use delorean_segment_store::column::{OwnedValue, Scalar, Value};
-use delorean_segment_store::{table, table::ColumnType};
+use segment_store::column::cmp::Operator;
+use segment_store::column::{OwnedValue, Scalar, Value};
+use segment_store::{table, table::ColumnType};
 
 const ONE_MS: i64 = 1_000_000;
 const ONE_HOUR: i64 = ONE_MS * 3_600_000;
@@ -32,7 +32,9 @@ const HOURS: usize = 1;
 fn main() {
     let mut rng = rand::thread_rng();
 
+    let now = std::time::Instant::now();
     let mut segment = generate_segment(START_TIME, ROWS_PER_HOUR, &mut rng);
+    println!("generating segment took {:?}", now.elapsed());
 
     let column_names = vec![
         ColumnType::Tag("env".to_string()),
@@ -62,7 +64,9 @@ fn main() {
     // time,          - 10
     //
     // No point ordering on trace_id or span_id
+    let now = std::time::Instant::now();
     sorter::sort(&mut segment, &[0, 1, 2, 6, 7, 3, 4, 10]).unwrap();
+    println!("sorting took {:?}", now.elapsed());
 
     let now = Instant::now();
     let rb = packers_to_record_batch(
@@ -160,7 +164,7 @@ fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) 
 
     // 9 tag columns: env, data_centre, cluster, user_id, request_id, trace_id, node_id, pod_id, span_id
     for _ in 0..9 {
-        segment.push(Packers::String(Packer::<ByteArray>::new()));
+        segment.push(Packers::UtfString(Packer::<String>::new()));
     }
 
     // A duration "field" column
@@ -234,14 +238,7 @@ fn generate_trace(
 
     let trace_id = rng.sample_iter(&Alphanumeric).take(8).collect::<String>();
 
-    let fixed_values = vec![
-        ByteArray::from(env.as_str()),
-        ByteArray::from(data_centre.as_str()),
-        ByteArray::from(cluster.as_str()),
-        ByteArray::from(user_id.as_str()),
-        ByteArray::from(request_id.as_str()),
-        ByteArray::from(trace_id.as_str()),
-    ];
+    let fixed_values = vec![env, data_centre, cluster, user_id, request_id, trace_id];
     let node_id_col = fixed_values.len();
     let pod_id_col = node_id_col + 1;
     let span_id_col = node_id_col + 2;
@@ -250,12 +247,12 @@ fn generate_trace(
 
     // for the first 6 columns append the fixed generated values "spans many" times
     // so that there are "spans new rows" in each of the columns.
-    let mut buffer = Vec::with_capacity(spans);
+    let mut buffer: Vec<String> = Vec::with_capacity(spans);
     for (i, value) in fixed_values.into_iter().enumerate() {
         buffer.clear();
-        buffer.resize(spans, value);
+        buffer.resize(spans, value.to_string());
 
-        table[i].str_packer_mut().extend_from_slice(&buffer);
+        table[i].utf_packer_mut().extend_from_slice(&buffer);
     }
 
     // the trace should move across hosts, which in this example would be
@@ -266,35 +263,30 @@ fn generate_trace(
     for _ in 0..spans {
         // each node the trace hits is in the same cluster...
         let node_id = rng.gen_range(0, 10); // cardinality is 2 * 10 * 10 * 10 = 2,000
-        buffer.push(ByteArray::from(
-            format!("node_id-{}-{}", node_id_prefix, node_id).as_str(),
-        ));
+        buffer.push(format!("node_id-{}-{}", node_id_prefix, node_id));
 
-        pod_buffer.push(ByteArray::from(
-            format!(
-                "pod_id-{}-{}-{}",
-                node_id_prefix,
-                node_id,
-                rng.gen_range(0, 10) // cardinality is 2 * 10 * 10 * 10 * 10 = 20,000
-            )
-            .as_str(),
+        pod_buffer.push(format!(
+            "pod_id-{}-{}-{}",
+            node_id_prefix,
+            node_id,
+            rng.gen_range(0, 10) // cardinality is 2 * 10 * 10 * 10 * 10 = 20,000
         ));
     }
     table[node_id_col]
-        .str_packer_mut()
-        .extend_from_slice(&buffer);
+        .utf_packer_mut()
+        .extend_from_slice(buffer.as_slice());
     table[pod_id_col]
-        .str_packer_mut()
-        .extend_from_slice(&pod_buffer);
+        .utf_packer_mut()
+        .extend_from_slice(pod_buffer.as_slice());
 
     // randomly generate span ids.
     buffer.clear();
     for _ in 0..spans {
         let id = rng.sample_iter(&Alphanumeric).take(8).collect::<String>();
-        buffer.push(ByteArray::from(id.as_str()));
+        buffer.push(id);
     }
     table[span_id_col]
-        .str_packer_mut()
+        .utf_packer_mut()
         .extend_from_slice(&buffer);
 
     // randomly generate some duration times in milliseconds.
@@ -353,7 +345,7 @@ fn arrow_datatype(col: &Packers) -> arrow::datatypes::DataType {
     match col {
         Packers::Float(_) => arrow::datatypes::DataType::Float64,
         Packers::Integer(_) => arrow::datatypes::DataType::Int64,
-        Packers::String(_) => arrow::datatypes::DataType::Utf8,
+        Packers::UtfString(_) | Packers::String(_) => arrow::datatypes::DataType::Utf8,
         Packers::Boolean(_) => arrow::datatypes::DataType::Boolean,
     }
 }
@@ -388,6 +380,21 @@ fn packers_to_record_batch(col_names: Vec<&str>, columns: Vec<Packers>) -> Recor
                     match v {
                         Some(v) => {
                             builder.append_value(v.as_utf8().unwrap()).unwrap();
+                        }
+                        None => {
+                            builder.append_null().unwrap();
+                        }
+                    }
+                }
+                let array = builder.finish();
+                record_batch_arrays.push(Arc::new(array));
+            }
+            Packers::UtfString(p) => {
+                let mut builder = array::StringBuilder::new(p.num_rows());
+                for v in p.values() {
+                    match v {
+                        Some(v) => {
+                            builder.append_value(v.as_str()).unwrap();
                         }
                         None => {
                             builder.append_null().unwrap();
@@ -440,6 +447,14 @@ fn print_segment(segment: &mut Vec<Packers>) {
                     if let Some(v) = itr.next() {
                         match v {
                             Some(v) => print!("{},", v.as_utf8().unwrap()),
+                            None => print!("NULL"),
+                        }
+                    }
+                }
+                packers::packers::PackersIterator::UtfString(itr) => {
+                    if let Some(v) = itr.next() {
+                        match v {
+                            Some(v) => print!("{},", v.as_str()),
                             None => print!("NULL"),
                         }
                     }
