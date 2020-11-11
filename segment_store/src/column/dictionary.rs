@@ -20,14 +20,22 @@ pub enum Encoding {
 }
 
 impl Encoding {
+<<<<<<< HEAD
     pub fn debug_name(&self) -> &'static str {
+=======
+    fn debug_name(&self) -> &'static str {
+>>>>>>> abe85f1... feat: implement push on plain dict encoding
         match &self {
             Encoding::RLE(_) => "RLE encoder",
             Encoding::Plain(_) => "plain encoder",
         }
     }
 
+<<<<<<< HEAD
     pub fn size(&self) -> u64 {
+=======
+    fn size(&self) -> u64 {
+>>>>>>> abe85f1... feat: implement push on plain dict encoding
         match &self {
             Encoding::RLE(enc) => enc.size(),
             Encoding::Plain(enc) => enc.size(),
@@ -317,6 +325,21 @@ mod test {
         }
     }
 
+<<<<<<< HEAD
+=======
+    #[test]
+    fn push() {
+        let encodings = vec![
+            Encoding::RLE(RLE::from(vec!["hello", "hello", "hello", "hello"])),
+            Encoding::Plain(Plain::from(vec!["hello", "hello", "hello", "hello"])),
+        ];
+
+        for enc in encodings {
+            _push(enc);
+        }
+    }
+
+>>>>>>> abe85f1... feat: implement push on plain dict encoding
     fn _push(mut enc: Encoding) {
         enc.push_additional(Some("hello".to_string()), 1);
         enc.push_additional(None, 3);
@@ -406,6 +429,7 @@ mod test {
             name
         );
         assert_eq!(enc.all_encoded_values(vec![]), vec![1, 2], "{}", name);
+<<<<<<< HEAD
     }
 
     #[test]
@@ -418,6 +442,8 @@ mod test {
         for enc in encodings {
             _row_ids_filter_equal(enc);
         }
+=======
+>>>>>>> abe85f1... feat: implement push on plain dict encoding
     }
 
     fn _row_ids_filter_equal(mut enc: Encoding) {
