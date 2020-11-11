@@ -19,7 +19,7 @@ const START_TIME: i64 = 1604188800000000000_i64;
 
 // determines how many rows will be in a single segment, which is set to one
 // hour.
-const ROWS_PER_HOUR: usize = 100_000_000;
+const ROWS_PER_HOUR: usize = 2_000_000;
 
 // minimum and maximum number of spans in a trace
 const SPANS_MIN: usize = 10;
@@ -32,7 +32,16 @@ fn main() {
 
     let now = std::time::Instant::now();
     let mut segment = generate_segment(START_TIME, ROWS_PER_HOUR, &mut rng);
-    println!("generating segment took {:?}", now.elapsed());
+    let middle_trace_id = segment[5]
+        .str_packer()
+        .get(ROWS_PER_HOUR / 2)
+        .unwrap()
+        .to_owned();
+    println!(
+        "generating segment took {:?} - sample trace_id is {}",
+        now.elapsed(),
+        middle_trace_id
+    );
 
     let column_names = vec![
         ColumnType::Tag("env".to_string()),
@@ -95,60 +104,33 @@ fn main() {
     println!("trace {:?} {:?}", range.0, range.1);
 
     // loop {
-    for _ in 0..20 {
-        if let OwnedValue::String(max) = &range.0 {
-            let now = Instant::now();
-            let results = table.select(
-                &[
-                    "env",
-                    "data_centre",
-                    "cluster",
-                    "user_id",
-                    "request_id",
+    for _ in 0..10 {
+        let now = Instant::now();
+        let results = table.select(
+            &[
+                "env",
+                "data_centre",
+                "cluster",
+                "user_id",
+                "request_id",
+                "trace_id",
+                "node_id",
+                "pod_id",
+                "span_id",
+                "duration",
+                "time",
+            ],
+            &[
+                (
                     "trace_id",
-                    "node_id",
-                    "pod_id",
-                    "span_id",
-                    "duration",
-                    "time",
-                ],
-                &[
-                    ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
-                    ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
-                    ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
-                ],
-            );
-            println!("executed select in {:?}", now.elapsed());
-            // println!("{:?}", results);
-        }
-    }
-
-    for _ in 0..20 {
-        if let OwnedValue::String(max) = &range.1 {
-            let now = Instant::now();
-            let results = table.select(
-                &[
-                    "env",
-                    "data_centre",
-                    "cluster",
-                    "user_id",
-                    "request_id",
-                    "trace_id",
-                    "node_id",
-                    "pod_id",
-                    "span_id",
-                    "duration",
-                    "time",
-                ],
-                &[
-                    ("trace_id", (Operator::Equal, Value::String(max.as_str()))),
-                    ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
-                    ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
-                ],
-            );
-            println!("executed select in {:?}", now.elapsed());
-            // println!("{:?}", results);
-        }
+                    (Operator::Equal, Value::String(middle_trace_id.as_str())),
+                ),
+                ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
+                ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
+            ],
+        );
+        println!("executed select in {:?}", now.elapsed());
+        println!("{:?}", results);
     }
 
     // }
