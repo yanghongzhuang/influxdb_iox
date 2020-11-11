@@ -164,7 +164,7 @@ fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) 
 
     // 9 tag columns: env, data_centre, cluster, user_id, request_id, trace_id, node_id, pod_id, span_id
     for _ in 0..9 {
-        segment.push(Packers::UtfString(Packer::<String>::new()));
+        segment.push(Packers::String(Packer::<String>::new()));
     }
 
     // A duration "field" column
@@ -252,7 +252,7 @@ fn generate_trace(
         buffer.clear();
         buffer.resize(spans, value.to_string());
 
-        table[i].utf_packer_mut().extend_from_slice(&buffer);
+        table[i].str_packer_mut().extend_from_slice(&buffer);
     }
 
     // the trace should move across hosts, which in this example would be
@@ -273,10 +273,10 @@ fn generate_trace(
         ));
     }
     table[node_id_col]
-        .utf_packer_mut()
+        .str_packer_mut()
         .extend_from_slice(buffer.as_slice());
     table[pod_id_col]
-        .utf_packer_mut()
+        .str_packer_mut()
         .extend_from_slice(pod_buffer.as_slice());
 
     // randomly generate span ids.
@@ -286,7 +286,7 @@ fn generate_trace(
         buffer.push(id);
     }
     table[span_id_col]
-        .utf_packer_mut()
+        .str_packer_mut()
         .extend_from_slice(&buffer);
 
     // randomly generate some duration times in milliseconds.
@@ -345,7 +345,7 @@ fn arrow_datatype(col: &Packers) -> arrow::datatypes::DataType {
     match col {
         Packers::Float(_) => arrow::datatypes::DataType::Float64,
         Packers::Integer(_) => arrow::datatypes::DataType::Int64,
-        Packers::UtfString(_) | Packers::String(_) => arrow::datatypes::DataType::Utf8,
+        Packers::Bytes(_) | Packers::String(_) => arrow::datatypes::DataType::Utf8,
         Packers::Boolean(_) => arrow::datatypes::DataType::Boolean,
     }
 }
@@ -374,7 +374,7 @@ fn packers_to_record_batch(col_names: Vec<&str>, columns: Vec<Packers>) -> Recor
             Packers::Integer(p) => {
                 record_batch_arrays.push(Arc::new(array::Int64Array::from(p.owned())));
             }
-            Packers::String(p) => {
+            Packers::Bytes(p) => {
                 let mut builder = array::StringBuilder::new(p.num_rows());
                 for v in p.values() {
                     match v {
@@ -389,7 +389,7 @@ fn packers_to_record_batch(col_names: Vec<&str>, columns: Vec<Packers>) -> Recor
                 let array = builder.finish();
                 record_batch_arrays.push(Arc::new(array));
             }
-            Packers::UtfString(p) => {
+            Packers::String(p) => {
                 let mut builder = array::StringBuilder::new(p.num_rows());
                 for v in p.values() {
                     match v {
@@ -443,7 +443,7 @@ fn print_segment(segment: &mut Vec<Packers>) {
                         }
                     }
                 }
-                packers::packers::PackersIterator::String(itr) => {
+                packers::packers::PackersIterator::Bytes(itr) => {
                     if let Some(v) = itr.next() {
                         match v {
                             Some(v) => print!("{},", v.as_utf8().unwrap()),
@@ -451,7 +451,7 @@ fn print_segment(segment: &mut Vec<Packers>) {
                         }
                     }
                 }
-                packers::packers::PackersIterator::UtfString(itr) => {
+                packers::packers::PackersIterator::String(itr) => {
                     if let Some(v) = itr.next() {
                         match v {
                             Some(v) => print!("{},", v.as_str()),
