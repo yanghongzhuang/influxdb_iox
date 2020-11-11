@@ -6,9 +6,7 @@ use rand_distr::{Distribution, Normal};
 use std::sync::Arc;
 use std::time::Instant;
 
-use arrow_deps::{
-    arrow, arrow::array, arrow::record_batch::RecordBatch, parquet::data_type::ByteArray,
-};
+use arrow_deps::{arrow, arrow::array, arrow::record_batch::RecordBatch};
 use packers::{sorter, Packer, Packers};
 
 use segment_store::column::cmp::Operator;

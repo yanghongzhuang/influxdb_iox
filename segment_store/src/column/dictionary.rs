@@ -3,7 +3,7 @@ pub mod rle;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use croaring::Bitmap;
+pub use self::rle::RLE;
 
 // This makes the encoding types available under the dictionary module.
 pub use self::plain::Plain;
