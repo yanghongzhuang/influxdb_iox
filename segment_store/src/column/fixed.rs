@@ -575,6 +575,13 @@ plain_from_arrow_impls! {
     (&arrow::array::Int64Array, u32),
     (&arrow::array::Int64Array, u16),
     (&arrow::array::Int64Array, u8),
+    (arrow::array::Int64Array, i64),
+    (arrow::array::Int64Array, i32),
+    (arrow::array::Int64Array, i16),
+    (arrow::array::Int64Array, i8),
+    (arrow::array::Int64Array, u32),
+    (arrow::array::Int64Array, u16),
+    (arrow::array::Int64Array, u8),
 }
 
 #[cfg(test)]

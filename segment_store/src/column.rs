@@ -2106,6 +2106,67 @@ impl From<&arrow::array::Int64Array> for Column {
     }
 }
 
+impl From<arrow::array::Int64Array> for Column {
+    fn from(arr: arrow::array::Int64Array) -> Self {
+        // determine min and max values.
+        let mut min: Option<i64> = None;
+        let mut max: Option<i64> = None;
+
+        for i in 0..arr.len() {
+            if arr.is_null(i) {
+                continue;
+            }
+
+            let v = arr.value(i);
+            match min {
+                Some(m) => {
+                    if v < m {
+                        min = Some(v);
+                    }
+                }
+                None => min = Some(v),
+            };
+
+            match max {
+                Some(m) => {
+                    if v > m {
+                        max = Some(v)
+                    }
+                }
+                None => max = Some(v),
+            };
+        }
+
+        let range = match (min, max) {
+            (None, None) => None,
+            (Some(min), Some(max)) => Some((min, max)),
+            _ => unreachable!("min/max must both be Some or None"),
+        };
+
+        let (meta, data) = match arr.null_count() {
+            0 => {
+                let data = fixed::Fixed::from(arr);
+                let meta = MetaData {
+                    size: data.size(),
+                    rows: data.num_rows(),
+                    range,
+                };
+                (meta, IntegerEncoding::I64I64(data))
+            }
+            _ => {
+                let data = fixed_null::FixedNull::<arrow::datatypes::Int64Type>::from(arr);
+                let meta = MetaData {
+                    size: data.size(),
+                    rows: data.num_rows(),
+                    range,
+                };
+                (meta, IntegerEncoding::I64I64N(data))
+            }
+        };
+        Column::Integer(meta, data)
+    }
+}
+
 /// Converts a slice of `f64` values into a fixed-width column encoding.
 impl From<&[f64]> for Column {
     fn from(arr: &[f64]) -> Self {
@@ -3465,7 +3526,7 @@ mod test {
             Some(30),
         ];
         let arr = Int64Array::from(input);
-        let col = Column::from(&arr);
+        let col = Column::from(arr);
         row_ids = col.row_ids_filter(
             &cmp::Operator::GT,
             &Value::Scalar(Scalar::I64(10)),
@@ -3820,7 +3881,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(&arr);
+        let col = Column::from(arr);
         assert_eq!(col.max(&[0, 1, 2][..]), Value::Scalar(Scalar::I64(200)));
 
         let input = &[Some("hello"), None, Some("world")];
@@ -3842,7 +3903,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(&arr);
+        let col = Column::from(arr);
         assert_eq!(col.sum(&[0, 1, 2][..]), Value::Scalar(Scalar::I64(200)));
     }
 
@@ -3858,7 +3919,7 @@ mod test {
 
         let input = vec![None, Some(200), None];
         let arr = Int64Array::from(input);
-        let col = Column::from(&arr);
+        let col = Column::from(arr);
         assert_eq!(col.count(&[0, 1, 2][..]), 1);
         assert_eq!(col.count(&[0, 2][..]), 0);
     }
