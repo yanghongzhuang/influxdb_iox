@@ -129,11 +129,7 @@ impl Encoding {
     pub fn dictionary(&self) -> Vec<&String> {
         match self {
             Encoding::RLE(enc) => enc.dictionary(),
-            Encoding::Plain(enc) => {
-                todo!() // figure out storing entries.
-                        // let v = enc.dictionary();
-                        // v.as_slice()
-            }
+            Encoding::Plain(enc) => enc.dictionary(),
         }
     }
 
