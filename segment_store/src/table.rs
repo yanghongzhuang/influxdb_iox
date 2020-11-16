@@ -44,7 +44,7 @@ impl Table {
     }
 
     // TODO(edd): error handling
-    pub fn with_record_batch(name: String, col_types: Vec<ColumnType>, rb: RecordBatch) -> Self {
+    pub fn with_record_batch(name: String, col_types: Vec<ColumnType>, rb: &RecordBatch) -> Self {
         let rows = rb.num_rows();
         let mut columns = BTreeMap::new();
         for (i, ct) in col_types.into_iter().enumerate() {

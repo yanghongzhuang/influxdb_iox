@@ -3,14 +3,20 @@ use rand::distributions::Alphanumeric;
 use rand::prelude::*;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
+use std::fs::File;
 use std::sync::Arc;
 use std::time::Instant;
 
-use arrow_deps::{arrow, arrow::array, arrow::record_batch::RecordBatch};
+use arrow_deps::{
+    arrow,
+    arrow::array,
+    arrow::ipc::{reader, writer},
+    arrow::record_batch::RecordBatch,
+};
 use packers::{sorter, Packer, Packers};
 
 use segment_store::column::cmp::Operator;
-use segment_store::column::{OwnedValue, Scalar, Value};
+use segment_store::column::{Scalar, Value};
 use segment_store::{table, table::ColumnType};
 
 const ONE_MS: i64 = 1_000_000;
@@ -19,7 +25,7 @@ const START_TIME: i64 = 1604188800000000000_i64;
 
 // determines how many rows will be in a single segment, which is set to one
 // hour.
-const ROWS_PER_HOUR: usize = 2_000_000;
+const ROWS_PER_HOUR: usize = 100_000_000;
 
 // minimum and maximum number of spans in a trace
 const SPANS_MIN: usize = 10;
@@ -29,19 +35,6 @@ const HOURS: usize = 1;
 
 fn main() {
     let mut rng = rand::thread_rng();
-
-    let now = std::time::Instant::now();
-    let mut segment = generate_segment(START_TIME, ROWS_PER_HOUR, &mut rng);
-    let middle_trace_id = segment[5]
-        .str_packer()
-        .get(ROWS_PER_HOUR / 2)
-        .unwrap()
-        .to_owned();
-    println!(
-        "generating segment took {:?} - sample trace_id is {}",
-        now.elapsed(),
-        middle_trace_id
-    );
 
     let column_names = vec![
         ColumnType::Tag("env".to_string()),
@@ -57,54 +50,22 @@ fn main() {
         ColumnType::Time("time".to_string()),
     ];
 
-    // COLUMN ORDERS:
-    // env            - 0
-    // data_centre,   - 1
-    // cluster,       - 2
-    // user_id,       - 3
-    // request_id,    - 4
-    // trace_id,      - 5
-    // node_id,       - 6
-    // pod_id,        - 7
-    // span_id        - 8
-    // duration,      - 9
-    // time,          - 10
-    //
-    // No point ordering on trace_id or span_id
-    let now = std::time::Instant::now();
-    sorter::sort(&mut segment, &[0, 1, 2, 6, 7, 3, 4, 10]).unwrap();
-    println!("sorting took {:?}", now.elapsed());
+    // uncomment this to generate a record batch.
+    let (rb, sample_trace_id) = generate_record_batch(&mut rng);
+    println!("Saving Arrow file");
+    save_record_batch(&rb[0]);
+
+    // uncomment this to load record batch from file.
+    // let sample_trace_id = "g6oHreN9".to_string();
+    // let rb = load_record_batch();
 
     let now = Instant::now();
-    let rb = packers_to_record_batch(
-        vec![
-            "env",
-            "data_centre",
-            "cluster",
-            "user_id",
-            "request_id",
-            "trace_id",
-            "node_id",
-            "pod_id",
-            "span_id",
-            "duration",
-            "time",
-        ],
-        segment,
-    );
-    println!("to arrow rb in {:?}", now.elapsed());
-
-    let now = Instant::now();
-    let table = table::Table::with_record_batch("tracing".to_string(), column_names, rb);
-    println!("to segment in {:?}", now.elapsed());
-    println!("segment size is {:?} bytes", table.size());
-
-    let ranges = table.column_ranges();
-    let range = ranges.get("trace_id").unwrap();
-    println!("trace {:?} {:?}", range.0, range.1);
+    let table = table::Table::with_record_batch("tracing".to_string(), column_names, &rb[0]);
+    println!("Record batch to segment took {:?}", now.elapsed());
+    println!("Segment size is {:?} bytes", table.size());
 
     // loop {
-    for _ in 0..10 {
+    for _ in 0..100 {
         let now = Instant::now();
         let results = table.select(
             &[
@@ -123,23 +84,75 @@ fn main() {
             &[
                 (
                     "trace_id",
-                    (Operator::Equal, Value::String(middle_trace_id.as_str())),
+                    (Operator::Equal, Value::String(sample_trace_id.as_str())),
                 ),
                 ("time", (Operator::GTE, Value::Scalar(Scalar::I64(0)))),
                 ("time", (Operator::LT, Value::Scalar(Scalar::I64(i64::MAX)))),
             ],
         );
         println!("executed select in {:?}", now.elapsed());
-        println!("{:?}", results);
+        // println!("{:?}", results);
     }
-
-    // }
-
-    // test_simple_mat(&mut rng);
-    // test_encoded_mat(&mut rng);
 }
 
-fn generate_segment(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) -> Vec<Packers> {
+// generates a record batch of test data and rather spuriously returns a sample
+// trace id.
+fn generate_record_batch(rng: &mut ThreadRng) -> (Vec<RecordBatch>, String) {
+    let now = std::time::Instant::now();
+    let mut packers = generate_packers(START_TIME, ROWS_PER_HOUR, rng);
+    let middle_trace_id = packers[5]
+        .str_packer()
+        .get(ROWS_PER_HOUR / 2)
+        .unwrap()
+        .to_owned();
+
+    println!(
+        "generating segment took {:?} - sample trace_id is {}",
+        now.elapsed(),
+        middle_trace_id
+    );
+
+    // COLUMN ORDERS:
+    // env            - 0
+    // data_centre,   - 1
+    // cluster,       - 2
+    // user_id,       - 3
+    // request_id,    - 4
+    // trace_id,      - 5
+    // node_id,       - 6
+    // pod_id,        - 7
+    // span_id        - 8
+    // duration,      - 9
+    // time,          - 10
+    //
+    // No point ordering on trace_id or span_id
+    let now = std::time::Instant::now();
+    sorter::sort(&mut packers, &[0, 1, 2, 6, 7, 3, 4, 10]).unwrap();
+    println!("sorting took {:?}", now.elapsed());
+
+    let now = Instant::now();
+    let rb = packers_to_record_batch(
+        vec![
+            "env",
+            "data_centre",
+            "cluster",
+            "user_id",
+            "request_id",
+            "trace_id",
+            "node_id",
+            "pod_id",
+            "span_id",
+            "duration",
+            "time",
+        ],
+        packers,
+    );
+    println!("Packers to arrow rb took {:?}", now.elapsed());
+
+    (vec![rb], middle_trace_id)
+}
+
+fn generate_packers(start_time: i64, rows_per_hour: usize, rng: &mut ThreadRng) -> Vec<Packers> {
     let mut segment = Vec::new();
 
     // 9 tag columns: env, data_centre, cluster, user_id, request_id, trace_id, node_id, pod_id, span_id
@@ -299,27 +312,6 @@ fn generate_trace(
     table
 }
 
-// // determine the arrow schema type from a segment store column
-// fn arrow_datatype(col: &segment::ColumnType) -> datatypes::DataType {
-//         match col {
-//             segment::ColumnType::Tag(c) => {
-//                 datatypes::DataType::Utf8
-//             },
-//             segment::ColumnType::Field(c) => {
-//                 match c{
-//                     Column::String(_, _) => datatypes::DataType::Utf8,
-//                     Column::Float(_, _) => datatypes::DataType::Float64,
-//                     Column::Integer(_, _) => datatypes::DataType::Int64,
-//                     Column::Unsigned(_, _) => datatypes::DataType::UInt64,
-//                     Column::Bool => datatypes::DataType::Boolean,
-//                     Column::ByteArray(_, _) => datatypes::DataType::Binary,
-//                 }
-//             },
-
-//             segment::ColumnType::Time(c) => datatypes::DataType::Int64,
-//         }
-//     }
-
 // determine the arrow schema type from a packer column
 fn arrow_datatype(col: &Packers) -> arrow::datatypes::DataType {
     match col {
@@ -453,80 +445,19 @@ fn print_segment(segment: &mut Vec<Packers>) {
     }
 }
 
-fn test_simple_mat(rng: &mut ThreadRng) {
-    let mut data = Vec::with_capacity(2_000_000);
-    for _ in 0..data.capacity() {
-        data.push(rng.sample_iter(&Alphanumeric).take(8).collect::<String>());
-    }
-
-    let row_ids = &[
-        934060_usize,
-        934357,
-        934791,
-        935216,
-        936017,
-        939675,
-        940112,
-        941812,
-        942309,
-        942709,
-    ];
-
-    let now = std::time::Instant::now();
-    let mut results = Vec::with_capacity(row_ids.len());
-    for row_id in row_ids {
-        results.push(Value::String(data[*row_id].as_str()));
-    }
-    println!("simple strings took {:?}", now.elapsed());
+fn save_record_batch(rb: &RecordBatch) {
+    let file = File::create("/Users/edd/tracing_100m.arrow").unwrap();
+    let mut writer = writer::StreamWriter::try_new(file, &rb.schema()).unwrap();
+    writer.write(&rb).unwrap();
+    writer.finish().unwrap();
 }
 
-fn test_encoded_mat(rng: &mut ThreadRng) {
-    // let mut dict = std::collections::BTreeMap::new();
-    let mut data = Vec::with_capacity(2_000_000);
-
-    let mut raw = Vec::with_capacity(data.capacity());
-    for _ in 0..raw.capacity() {
-        raw.push(rng.sample_iter(&Alphanumeric).take(8).collect::<String>());
-    }
-
-    let mut dict = raw.clone();
-    dict.sort();
-
-    // let i = 0;
-    // for v in sorted {
-    // dict.insert(v, i as u32);
-    // i += 1;
-    // dict.
-    // }
-
-    for raw_v in raw {
-        for i in 0..dict.len() {
-            if dict[i] == raw_v {
-                data.push(i as u32);
-                break;
-            }
-        }
-    }
-
-    let row_ids = &[
-        934060_usize,
-        934357,
-        934791,
-        935216,
-        936017,
-        939675,
-        940112,
-        941812,
-        942309,
-        942709,
-    ];
-
+fn load_record_batch() -> Vec<RecordBatch> {
     let now = std::time::Instant::now();
-    let mut results = Vec::with_capacity(row_ids.len());
-    for row_id in row_ids {
-        let encoded_id = data[*row_id];
-        let decoded_value = &dict[encoded_id as usize];
-        results.push(Value::String(decoded_value));
-    }
-    println!("encoded strings took {:?}", now.elapsed());
+    let file = File::open("/Users/edd/tracing_100m.arrow").unwrap();
+    let reader = reader::StreamReader::try_new(file).unwrap();
+    let rbs = reader.map(|r| r.unwrap()).collect::<Vec<_>>();
+    println!("Loading record batches from arrow took {:?}", now.elapsed());
+
+    rbs
 }
