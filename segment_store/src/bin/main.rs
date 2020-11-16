@@ -51,13 +51,13 @@ fn main() {
     ];
 
     // uncomment this to generate a record batch.
-    let (rb, sample_trace_id) = generate_record_batch(&mut rng);
-    println!("Saving Arrow file");
-    save_record_batch(&rb[0]);
+    // let (rb, sample_trace_id) = generate_record_batch(&mut rng);
+    // println!("Saving Arrow file");
+    // save_record_batch(&rb[0]);
 
     // uncomment this to load record batch from file.
-    // let sample_trace_id = "g6oHreN9".to_string();
-    // let rb = load_record_batch();
+    let sample_trace_id = "zzzzm6FK".to_string();
+    let rb = load_record_batch();
 
     let now = Instant::now();
     let table = table::Table::with_record_batch("tracing".to_string(), column_names, &rb[0]);
@@ -454,7 +454,7 @@ fn save_record_batch(rb: &RecordBatch) {
 
 fn load_record_batch() -> Vec<RecordBatch> {
     let now = std::time::Instant::now();
-    let file = File::open("/Users/edd/tracing_100m.arrow").unwrap();
+    let file = File::open("/Users/edd/tracing_100m-zzzzm6FK.arrow").unwrap();
     let reader = reader::StreamReader::try_new(file).unwrap();
     let rbs = reader.map(|r| r.unwrap()).collect::<Vec<_>>();
     println!("Loading record batches from arrow took {:?}", now.elapsed());

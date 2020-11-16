@@ -191,16 +191,15 @@ impl Plain {
             // common == case.
             match op {
                 cmp::Operator::Equal => {
-                    #[cfg(all(
-                        any(target_arch = "x86", target_arch = "x86_64"),
-                        target_feature = "avx2"
-                    ))]
-                    return self.row_ids_equal_simd(encoded_id, op, dst);
-
-                    #[cfg(any(
-                        not(any(target_arch = "x86", target_arch = "x86_64")),
-                        not(target_feature = "avx2")
-                    ))]
+                    // #[cfg(all(
+                    //     any(target_arch = "x86", target_arch = "x86_64"),
+                    //     target_feature = "avx2"
+                    // ))]
+                    // // return self.row_ids_equal_simd(encoded_id, op, dst);
+                    // #[cfg(any(
+                    //     not(any(target_arch = "x86", target_arch = "x86_64")),
+                    //     not(target_feature = "avx2")
+                    // ))]
                     for (i, next) in self.encoded_data.iter().enumerate() {
                         if next == &encoded_id {
                             // N.B(edd): adding individual values like this to a bitset
