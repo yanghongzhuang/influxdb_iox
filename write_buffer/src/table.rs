@@ -632,7 +632,7 @@ impl Table {
             .map(|field_name| {
                 agg.to_datafusion_expr(col(field_name.as_ref()))
                     .context(CreatingAggregates)
-                    .and_then(|agg| Ok(agg.alias(field_name.as_ref())))
+                    .map(|agg| agg.alias(field_name.as_ref()))
             })
             .collect::<Result<Vec<_>>>()?;
 
