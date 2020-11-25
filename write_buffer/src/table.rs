@@ -1469,11 +1469,11 @@ mod tests {
 
         assert_eq!(
             plan.series_set_plan.tag_columns,
-            *str_vec_to_arc_vec(&vec!["city", "state"])
+            *str_vec_to_arc_vec(&["city", "state"])
         );
         assert_eq!(
             plan.series_set_plan.field_columns,
-            *str_vec_to_arc_vec(&vec!["temp"])
+            *str_vec_to_arc_vec(&["temp"])
         );
 
         // run the created plan, ensuring the output is as expected
@@ -1524,11 +1524,11 @@ mod tests {
 
         assert_eq!(
             plan.series_set_plan.tag_columns,
-            *str_vec_to_arc_vec(&vec!["city", "state"])
+            *str_vec_to_arc_vec(&["city", "state"])
         );
         assert_eq!(
             plan.series_set_plan.field_columns,
-            *str_vec_to_arc_vec(&vec!["temp"])
+            *str_vec_to_arc_vec(&["temp"])
         );
 
         // run the created plan, ensuring the output is as expected
